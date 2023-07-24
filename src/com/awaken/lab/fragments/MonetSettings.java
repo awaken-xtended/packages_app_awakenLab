@@ -32,9 +32,8 @@ import com.android.settings.R;
 import com.android.settingslib.search.SearchIndexable;
 
 import com.android.settings.custom.colorpicker.ColorPickerPreference;
-import com.android.settings.custom.preference.CustomSeekBarPreference;
-import com.android.settings.custom.preference.SwitchPreference;
-
+import com.awaken.support.preferences.CustomSeekBarPreference;
+import com.awaken.support.preferences.SwitchPreference;
 import java.lang.CharSequence;
 
 import org.json.JSONException;
@@ -50,6 +49,8 @@ public class MonetSettings extends SettingsPreferenceFragment implements
             "android.theme.customization.system_palette";
     private static final String OVERLAY_CATEGORY_THEME_STYLE =
             "android.theme.customization.theme_style";
+    private static final String OVERLAY_CATEGORY_BG_COLOR =
+            "android.theme.customization.bg_color";        
     private static final String OVERLAY_COLOR_SOURCE =
             "android.theme.customization.color_source";
     private static final String OVERLAY_COLOR_BOTH =
@@ -67,6 +68,8 @@ public class MonetSettings extends SettingsPreferenceFragment implements
     private static final String PREF_THEME_STYLE = "theme_style";
     private static final String PREF_COLOR_SOURCE = "color_source";
     private static final String PREF_ACCENT_COLOR = "accent_color";
+    private static final String PREF_ACCENT_BACKGROUND = "accent_background";
+    private static final String PREF_BG_COLOR = "bg_color";
     private static final String PREF_LUMINANCE_FACTOR = "luminance_factor";
     private static final String PREF_CHROMA_FACTOR = "chroma_factor";
     private static final String PREF_TINT_BACKGROUND = "tint_background";
@@ -74,8 +77,10 @@ public class MonetSettings extends SettingsPreferenceFragment implements
     private ListPreference mThemeStylePref;
     private ListPreference mColorSourcePref;
     private ColorPickerPreference mAccentColorPref;
+    private ColorPickerPreference mBgColorPref;
     private CustomSeekBarPreference mLuminancePref;
     private CustomSeekBarPreference mChromaPref;
+    private SwitchPreference mAccentBackgroundPref;
     private SwitchPreference mTintBackgroundPref;
 
     @Override
@@ -86,6 +91,8 @@ public class MonetSettings extends SettingsPreferenceFragment implements
         mThemeStylePref = findPreference(PREF_THEME_STYLE);
         mColorSourcePref = findPreference(PREF_COLOR_SOURCE);
         mAccentColorPref = findPreference(PREF_ACCENT_COLOR);
+        mAccentBackgroundPref = findPreference(PREF_ACCENT_BACKGROUND);
+        mBgColorPref = findPreference(PREF_BG_COLOR);
         mLuminancePref = findPreference(PREF_LUMINANCE_FACTOR);
         mChromaPref = findPreference(PREF_CHROMA_FACTOR);
         mTintBackgroundPref = findPreference(PREF_TINT_BACKGROUND);
@@ -96,6 +103,8 @@ public class MonetSettings extends SettingsPreferenceFragment implements
         mColorSourcePref.setOnPreferenceChangeListener(this);
         mAccentColorPref.setOnPreferenceChangeListener(this);
         mLuminancePref.setOnPreferenceChangeListener(this);
+         mAccentBackgroundPref.setOnPreferenceChangeListener(this);
+        mBgColorPref.setOnPreferenceChangeListener(this);
         mChromaPref.setOnPreferenceChangeListener(this);
         mTintBackgroundPref.setOnPreferenceChangeListener(this);
     }
@@ -117,7 +126,8 @@ public class MonetSettings extends SettingsPreferenceFragment implements
                 final String style = object.optString(OVERLAY_CATEGORY_THEME_STYLE, null);
                 final String source = object.optString(OVERLAY_COLOR_SOURCE, null);
                 final String color = object.optString(OVERLAY_CATEGORY_SYSTEM_PALETTE, null);
-                 final boolean both = object.optInt(OVERLAY_COLOR_BOTH, 0) == 1;
+                final int bgColor = object.optInt(OVERLAY_CATEGORY_BG_COLOR);
+                final boolean both = object.optInt(OVERLAY_COLOR_BOTH, 0) == 1;
                 final boolean tintBG = object.optInt(OVERLAY_TINT_BACKGROUND, 0) == 1;
                 final float lumin = (float) object.optDouble(OVERLAY_LUMINANCE_FACTOR, 1d);
                 final float chroma = (float) object.optDouble(OVERLAY_CHROMA_FACTOR, 1d); 
@@ -147,6 +157,14 @@ public class MonetSettings extends SettingsPreferenceFragment implements
                     mAccentColorPref.setNewPreviewColor(
                             ColorPickerPreference.convertToColorInt(color));
                 }
+                final boolean bgEnabled = enabled && bgColor != 0;
+                if (bgEnabled) {
+                    mBgColorPref.setNewPreviewColor(bgColor);
+                } else if (!enabled) {
+                    mAccentBackgroundPref.setEnabled(false);
+                }
+                mAccentBackgroundPref.setChecked(bgEnabled);
+                mBgColorPref.setEnabled(bgEnabled);
                 // etc
                 int luminV = 0;
                 if (lumin > 1d) luminV = Math.round((lumin - 1f) * 100f);
@@ -179,6 +197,15 @@ public class MonetSettings extends SettingsPreferenceFragment implements
             int value = (Integer) newValue;
         setColorValue(value);
             return true;
+          } else if (preference == mAccentBackgroundPref) {
+            boolean value = (Boolean) newValue;
+            if (!value) setBgColorValue(0);
+            mBgColorPref.setEnabled(value);
+            return true;
+        } else if (preference == mBgColorPref) {
+            int value = (Integer) newValue;
+            setBgColorValue(value);
+            return true;    
         } else if (preference == mLuminancePref) {
             int value = (Integer) newValue;
             setLuminanceValue(value);   
@@ -208,6 +235,12 @@ public class MonetSettings extends SettingsPreferenceFragment implements
     private boolean updateAccentEnablement(String source) {
         final boolean shouldEnable = source != null && source.equals(COLOR_SOURCE_PRESET);
         mAccentColorPref.setEnabled(shouldEnable);
+        mAccentBackgroundPref.setEnabled(shouldEnable);
+        if (!shouldEnable) {
+            mBgColorPref.setEnabled(false);
+            mAccentBackgroundPref.setEnabled(false);
+            mAccentBackgroundPref.setChecked(false);
+        }
         return shouldEnable;
     }
 
@@ -266,6 +299,16 @@ public class MonetSettings extends SettingsPreferenceFragment implements
             putSettingsJson(object);
         } catch (JSONException | IllegalArgumentException ignored) {}
     }
+    private void setBgColorValue(int color) {
+        try {
+            JSONObject object = getSettingsJson();
+            if (color != 0) object.putOpt(OVERLAY_CATEGORY_BG_COLOR, color);
+            else object.remove(OVERLAY_CATEGORY_BG_COLOR);
+            putSettingsJson(object);
+        } catch (JSONException | IllegalArgumentException ignored) {}
+    }
+
+    
     private void setLuminanceValue(int lumin) {
         try {
             JSONObject object = getSettingsJson();
@@ -299,7 +342,7 @@ public class MonetSettings extends SettingsPreferenceFragment implements
 
     @Override
     public int getMetricsCategory() {
-        return MetricsProto.MetricsEvent.HAVOC_SETTINGS;
+        return MetricsProto.MetricsEvent.AWAKEN_SETTINGS;
     }
 
     public static final BaseSearchIndexProvider SEARCH_INDEX_DATA_PROVIDER =
